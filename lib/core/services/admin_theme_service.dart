@@ -27,95 +27,88 @@ class AdminThemeService {
 
   Future<Map<String, dynamic>> getGlobalCatalog() async {
     final headers = await _getHeaders();
-
-    if (headers == null) {
-      return {'success': false, 'message': 'No autorizado'};
-    }
+    if (headers == null) return {'success': false, 'message': 'No autorizado'};
 
     try {
       final url = '${ApiConstants.baseUrl}/files/themes';
-
-      print("\n");
-      print("========== Obtener todas las tematicas generales ==========");
-      print("REQUEST:");
-      print("GET -> $url");
-      print("HEADERS:");
-      print(headers);
-
       final response = await http.get(Uri.parse(url), headers: headers);
 
-      print("\nRESPONSE:");
-      print("STATUS CODE: ${response.statusCode}");
-      print("BODY:");
-      print(response.body);
-      print("=======================================");
-      print("\n");
-
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
+        // 1. Decodificamos como Map, no como List
+        final Map<String, dynamic> body = jsonDecode(response.body);
 
-        return {'success': true, 'data': ThemeModel.fromJsonList(data)};
+        // 2. Extraemos la lista desde la llave "areas"
+        final List<dynamic> areas = body['areas'] ?? [];
+
+        // 3. Aplanamos igual que en los otros servicios
+        List<dynamic> subcategoriasPlanas = [];
+        for (var area in areas) {
+          final String nombreDelArea = area['nombreArea'] ?? '';
+          final subs = area['subcategorias'] ?? [];
+          for (var sub in subs) {
+            final subMap = Map<String, dynamic>.from(sub);
+            subMap['nombreArea'] = nombreDelArea;
+            subcategoriasPlanas.add(subMap);
+          }
+        }
+
+        return {
+          'success': true,
+          'data': ThemeModel.fromJsonList(subcategoriasPlanas),
+        };
       }
 
-      final errorBody = jsonDecode(response.body);
-
-      return {
-        'success': false,
-        'message': errorBody['message'] ?? 'Error al cargar el catálogo global',
-      };
+      return {'success': false, 'message': 'Error al cargar catálogo'};
     } catch (e) {
-      print("\nERROR GET GLOBAL THEMES:");
-      print(e);
-      print("\n");
-
+      print("ERROR GET GLOBAL THEMES: $e");
       return {'success': false, 'message': 'Error de conexión'};
     }
   }
 
   Future<Map<String, dynamic>> getUserThemes(String userId) async {
     final headers = await _getHeaders();
-
-    if (headers == null) {
-      return {'success': false, 'message': 'No autorizado'};
-    }
+    if (headers == null) return {'success': false, 'message': 'No autorizado'};
 
     try {
       final url = '$baseUrl/users/$userId/themes';
-
-      print("\n");
-      print("========== Obtener tematicas de usuario ==========");
-      print("REQUEST:");
-      print("GET -> $url");
-      print("HEADERS:");
-      print(headers);
-
       final response = await http.get(Uri.parse(url), headers: headers);
 
-      print("\nRESPONSE:");
-      print("STATUS CODE: ${response.statusCode}");
-      print("BODY:");
-      print(response.body);
-      print("=====================================");
-      print("\n");
-
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
+        final List<dynamic> decodedBody = jsonDecode(response.body);
+        List<dynamic> subcategoriasPlanas = [];
 
-        return {'success': true, 'data': ThemeModel.fromJsonList(data)};
+        // Aplanamiento: Extraemos solo las subcategorías del documento de MongoDB
+        for (var doc in decodedBody) {
+          final List<dynamic> areas =
+              doc['areasInteres'] ?? doc['AreasInteres'] ?? [];
+          for (var area in areas) {
+            final String nombreDelArea =
+                area['nombreArea'] ?? area['NombreArea'] ?? '';
+            final subs = area['subcategorias'] ?? area['Subcategorias'] ?? [];
+
+            for (var sub in subs) {
+              final subMap = Map<String, dynamic>.from(sub);
+              subMap['nombreArea'] =
+                  nombreDelArea; // Inyectamos el nombre del área
+              subcategoriasPlanas.add(subMap);
+            }
+          }
+        }
+
+        // Ahora ThemeModel.fromJsonList recibirá la lista plana que sí sabe procesar
+        return {
+          'success': true,
+          'data': ThemeModel.fromJsonList(subcategoriasPlanas),
+        };
       }
-
-      final errorBody = jsonDecode(response.body);
 
       return {
         'success': false,
         'message':
-            errorBody['message'] ?? 'Error al cargar las temáticas del usuario',
+            'Error ${response.statusCode}: No se pudieron obtener temáticas.',
       };
     } catch (e) {
-      print("\nERROR GET USER THEMES:");
-      print(e);
-      print("\n");
-
+      print("ERROR: $e");
       return {'success': false, 'message': 'Error de conexión'};
     }
   }
@@ -125,61 +118,46 @@ class AdminThemeService {
     String themeId,
   ) async {
     final headers = await _getHeaders();
-
-    if (headers == null) {
-      return {'success': false, 'message': 'No autorizado'};
-    }
+    if (headers == null) return {'success': false, 'message': 'No autorizado'};
 
     try {
       final url = '$baseUrl/users/$userId/themes';
 
-      final requestBody = {
-        'tematicasIds': [themeId],
-      };
+      // ENVIAMOS LA LISTA DIRECTA (sin llaves adicionales)
+      // Ajusta las llaves 'areaId', 'nombreArea', etc., según lo que tenga tu clase AreaInteres en C#
+      final List<dynamic> requestBody = [
+        {
+          "areaId":
+              "cs", // Debes asegurarte de enviar el areaId correcto del catálogo
+          "nombreArea": "Ciencias de la Computación",
+          "subcategorias": [
+            {
+              "id": themeId,
+              "nombre":
+                  "Nombre de la subcategoría", // Verifica si el backend valida este campo
+            },
+          ],
+        },
+      ];
 
-      print("\n");
-      print("========== Asignar una tematica ==========");
-      print("REQUEST:");
-      print("POST -> $url");
-      print("HEADERS:");
-      print(headers);
-      print("BODY:");
-      print(jsonEncode(requestBody));
+      print("BODY ENVIADO: ${jsonEncode(requestBody)}");
 
       final response = await http.post(
         Uri.parse(url),
         headers: headers,
-        body: jsonEncode(requestBody),
+        body: jsonEncode(requestBody), // Pasamos la lista directa
       );
 
-      print("\nRESPONSE:");
-      print("STATUS CODE: ${response.statusCode}");
-      print("BODY:");
-      print(response.body);
-      print("==================================");
-      print("\n");
-
       if (response.statusCode == 201 || response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
-        return {
-          'success': true,
-          'message': data['mensaje'] ?? 'Temática asignada correctamente',
-        };
+        return {'success': true, 'message': 'Temática asignada correctamente'};
       }
-
-      final errorBody = jsonDecode(response.body);
 
       return {
         'success': false,
-        'message': errorBody['message'] ?? 'Error al asignar la temática',
+        'message': 'Error ${response.statusCode}: ${response.body}',
       };
     } catch (e) {
-      print("\nERROR ASSIGN THEME:");
-      print(e);
-      print("\n");
-
-      return {'success': false, 'message': 'Error de conexión'};
+      return {'success': false, 'message': 'Error de conexión: $e'};
     }
   }
 

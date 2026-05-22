@@ -7,7 +7,6 @@ import '../../../core/models/file_model.dart';
 
 class FileService {
   final _storage = const FlutterSecureStorage();
-
   final String baseUrl = "${ApiConstants.baseUrl}/files";
 
   Future<String?> _getToken() async {
@@ -25,34 +24,91 @@ class FileService {
     };
   }
 
+  void _printRequest({
+    required String service,
+    required String method,
+    required String url,
+    Map<String, dynamic>? body,
+    Map<String, String>? headers,
+  }) {
+    print('================ REQUEST [$service] ================');
+    print('HTTP METHOD: $method');
+    print('URL: $url');
+
+    if (headers != null) {
+      print('HEADERS: ${jsonEncode(headers)}');
+    }
+
+    if (body != null) {
+      print('BODY: ${jsonEncode(body)}');
+    }
+
+    print('====================================================');
+  }
+
+  void _printResponse({
+    required String service,
+    required int statusCode,
+    required dynamic body,
+  }) {
+    print('================ RESPONSE [$service] ================');
+    print('STATUS CODE: $statusCode');
+    print('BODY: ${jsonEncode(body)}');
+    print('=====================================================');
+  }
+
+  void _printError({required String service, required dynamic error}) {
+    print('================ ERROR [$service] ===================');
+    print(error.toString());
+    print('=====================================================');
+  }
+
   Future<Map<String, dynamic>> uploadFile(
     String filePath,
     String fileName,
   ) async {
     if (!fileName.toLowerCase().endsWith('.pdf')) {
-      return {
+      final errorResponse = {
         'success': false,
         'message': 'Formato inválido. Solo se admiten documentos PDF.',
       };
+
+      _printResponse(
+        service: 'uploadFile',
+        statusCode: 400,
+        body: errorResponse,
+      );
+
+      return errorResponse;
     }
 
     final token = await _getToken();
 
     if (token == null) {
-      return {'success': false, 'message': 'No hay sesión activa'};
+      final errorResponse = {
+        'success': false,
+        'message': 'No hay sesión activa',
+      };
+
+      _printResponse(
+        service: 'uploadFile',
+        statusCode: 401,
+        body: errorResponse,
+      );
+
+      return errorResponse;
     }
 
     try {
       final url = '$baseUrl/upload';
 
-      print("\n");
-      print("=============== Cargar archivo ===============");
-      print("REQUEST:");
-      print("POST -> $url");
-      print("FILE PATH:");
-      print(filePath);
-      print("FILE NAME:");
-      print(fileName);
+      _printRequest(
+        service: 'uploadFile',
+        method: 'POST',
+        url: url,
+        headers: {'Authorization': 'Bearer $token'},
+        body: {'filePath': filePath, 'fileName': fileName},
+      );
 
       final request = http.MultipartRequest('POST', Uri.parse(url));
 
@@ -64,30 +120,35 @@ class FileService {
 
       final response = await http.Response.fromStream(streamedResponse);
 
-      print("\nRESPONSE:");
-      print("STATUS CODE: ${response.statusCode}");
-      print("BODY:");
-      print(response.body);
-      print("===========================================");
-      print("\n");
+      dynamic responseBody;
+
+      try {
+        responseBody = jsonDecode(response.body);
+      } catch (_) {
+        responseBody = response.body;
+      }
+
+      _printResponse(
+        service: 'uploadFile',
+        statusCode: response.statusCode,
+        body: responseBody,
+      );
 
       if (response.statusCode == 202 || response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
         return {
           'success': true,
-          'message': data['mensaje'] ?? 'Archivo enviado correctamente',
-          'data': FileModel.fromJson(data),
+          'message': responseBody['mensaje'] ?? 'Archivo enviado correctamente',
+          'data': FileModel.fromJson(responseBody),
         };
       }
 
       if (response.statusCode == 400) {
-        final errorData = jsonDecode(response.body);
-
         return {
           'success': false,
           'message':
-              errorData['Error'] ?? errorData['message'] ?? 'Archivo rechazado',
+              responseBody['Error'] ??
+              responseBody['message'] ??
+              'Archivo rechazado',
         };
       }
 
@@ -96,9 +157,7 @@ class FileService {
         'message': 'Error ${response.statusCode} al subir archivo',
       };
     } catch (e) {
-      print("\nERROR UPLOAD FILE:");
-      print(e);
-      print("\n");
+      _printError(service: 'uploadFile', error: e);
 
       return {'success': false, 'message': 'Error de conexión'};
     }
@@ -108,42 +167,57 @@ class FileService {
     final headers = await _getHeaders();
 
     if (headers == null) {
-      return {'success': false, 'message': 'No hay sesión activa'};
+      final errorResponse = {
+        'success': false,
+        'message': 'No hay sesión activa',
+      };
+
+      _printResponse(
+        service: 'getMyFiles',
+        statusCode: 401,
+        body: errorResponse,
+      );
+
+      return errorResponse;
     }
 
     try {
-      print("\n");
-      print("=============== Obtener mis archivos ===============");
-      print("REQUEST:");
-      print("GET -> $baseUrl");
-      print("HEADERS:");
-      print(headers);
+      _printRequest(
+        service: 'getMyFiles',
+        method: 'GET',
+        url: baseUrl,
+        headers: headers,
+      );
 
       final response = await http.get(Uri.parse(baseUrl), headers: headers);
 
-      print("\nRESPONSE:");
-      print("STATUS CODE: ${response.statusCode}");
-      print("BODY:");
-      print(response.body);
-      print("============================================");
-      print("\n");
+      dynamic responseBody;
+
+      try {
+        responseBody = jsonDecode(response.body);
+      } catch (_) {
+        responseBody = response.body;
+      }
+
+      _printResponse(
+        service: 'getMyFiles',
+        statusCode: response.statusCode,
+        body: responseBody,
+      );
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
+        final List<dynamic> data = responseBody;
 
         return {'success': true, 'data': FileModel.fromJsonList(data)};
       }
 
-      final errorBody = jsonDecode(response.body);
-
       return {
         'success': false,
-        'message': errorBody['message'] ?? 'No se pudieron cargar los archivos',
+        'message':
+            responseBody['message'] ?? 'No se pudieron cargar los archivos',
       };
     } catch (e) {
-      print("\nERROR GET MY FILES:");
-      print(e);
-      print("\n");
+      _printError(service: 'getMyFiles', error: e);
 
       return {'success': false, 'message': 'Error de red'};
     }
@@ -153,47 +227,60 @@ class FileService {
     final headers = await _getHeaders();
 
     if (headers == null) {
-      return {'success': false, 'message': 'No hay sesión activa'};
+      final errorResponse = {
+        'success': false,
+        'message': 'No hay sesión activa',
+      };
+
+      _printResponse(
+        service: 'deleteFile',
+        statusCode: 401,
+        body: errorResponse,
+      );
+
+      return errorResponse;
     }
 
     try {
       final url = '$baseUrl/$fileId';
 
-      print("\n");
-      print("=============== Eliminar archivos ===============");
-      print("REQUEST:");
-      print("DELETE -> $url");
-      print("HEADERS:");
-      print(headers);
+      _printRequest(
+        service: 'deleteFile',
+        method: 'DELETE',
+        url: url,
+        headers: headers,
+      );
 
       final response = await http.delete(Uri.parse(url), headers: headers);
 
-      print("\nRESPONSE:");
-      print("STATUS CODE: ${response.statusCode}");
-      print("BODY:");
-      print(response.body);
-      print("===========================================");
-      print("\n");
+      dynamic responseBody;
+
+      try {
+        responseBody = jsonDecode(response.body);
+      } catch (_) {
+        responseBody = response.body;
+      }
+
+      _printResponse(
+        service: 'deleteFile',
+        statusCode: response.statusCode,
+        body: responseBody,
+      );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
         return {
           'success': true,
-          'message': data['mensaje'] ?? 'Archivo eliminado correctamente',
+          'message':
+              responseBody['mensaje'] ?? 'Archivo eliminado correctamente',
         };
       }
 
-      final errorBody = jsonDecode(response.body);
-
       return {
         'success': false,
-        'message': errorBody['message'] ?? 'Error al eliminar archivo',
+        'message': responseBody['message'] ?? 'Error al eliminar archivo',
       };
     } catch (e) {
-      print("\nERROR DELETE FILE:");
-      print(e);
-      print("\n");
+      _printError(service: 'deleteFile', error: e);
 
       return {'success': false, 'message': 'Error de red'};
     }
@@ -202,38 +289,51 @@ class FileService {
   Future<String> checkStatus(String fileId) async {
     final headers = await _getHeaders();
 
-    if (headers == null) return 'ERROR';
+    if (headers == null) {
+      _printResponse(
+        service: 'checkStatus',
+        statusCode: 401,
+        body: {'success': false, 'message': 'No hay sesión activa'},
+      );
+
+      return 'ERROR';
+    }
 
     try {
       final url = '$baseUrl/$fileId/status';
 
-      print("\n");
-      print("=============== Revisar estatus ===============");
-      print("REQUEST:");
-      print("GET -> $url");
-      print("HEADERS:");
-      print(headers);
+      _printRequest(
+        service: 'checkStatus',
+        method: 'GET',
+        url: url,
+        headers: headers,
+      );
 
       final response = await http.get(Uri.parse(url), headers: headers);
 
-      print("\nRESPONSE:");
-      print("STATUS CODE: ${response.statusCode}");
-      print("BODY:");
-      print(response.body);
-      print("============================================");
-      print("\n");
+      dynamic responseBody;
+
+      try {
+        responseBody = jsonDecode(response.body);
+      } catch (_) {
+        responseBody = response.body;
+      }
+
+      _printResponse(
+        service: 'checkStatus',
+        statusCode: response.statusCode,
+        body: responseBody,
+      );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
-        return data['estado'] ?? data['Estado'] ?? 'ERROR';
+        return responseBody['estado']?.toString() ??
+            responseBody['Estado']?.toString() ??
+            'ERROR';
       }
 
       return 'ERROR';
     } catch (e) {
-      print("\nERROR CHECK STATUS:");
-      print(e);
-      print("\n");
+      _printError(service: 'checkStatus', error: e);
 
       return 'ERROR';
     }
@@ -243,47 +343,63 @@ class FileService {
     final headers = await _getHeaders();
 
     if (headers == null) {
-      return {'success': false, 'message': 'No hay sesión activa'};
+      final errorResponse = {
+        'success': false,
+        'message': 'No hay sesión activa',
+      };
+
+      _printResponse(
+        service: 'getDownloadUrl',
+        statusCode: 401,
+        body: errorResponse,
+      );
+
+      return errorResponse;
     }
 
     try {
       final url = '$baseUrl/$fileId/download-url';
 
-      print("\n");
-      print("============= Obtener link de descarga =============");
-      print("REQUEST:");
-      print("GET -> $url");
-      print("HEADERS:");
-      print(headers);
+      _printRequest(
+        service: 'getDownloadUrl',
+        method: 'GET',
+        url: url,
+        headers: headers,
+      );
 
       final response = await http.get(Uri.parse(url), headers: headers);
 
-      print("\nRESPONSE:");
-      print("STATUS CODE: ${response.statusCode}");
-      print("BODY:");
-      print(response.body);
-      print("============================================");
-      print("\n");
+      dynamic responseBody;
+
+      try {
+        responseBody = jsonDecode(response.body);
+      } catch (_) {
+        responseBody = response.body;
+      }
+
+      _printResponse(
+        service: 'getDownloadUrl',
+        statusCode: response.statusCode,
+        body: responseBody,
+      );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
         return {
           'success': true,
-          'url': data['downloadUrl'] ?? data['DownloadUrl'] ?? data['url'],
+          'url':
+              responseBody['downloadUrl'] ??
+              responseBody['DownloadUrl'] ??
+              responseBody['url'],
         };
       }
 
-      final errorBody = jsonDecode(response.body);
-
       return {
         'success': false,
-        'message': errorBody['message'] ?? 'Error al obtener URL de descarga',
+        'message':
+            responseBody['message'] ?? 'Error al obtener URL de descarga',
       };
     } catch (e) {
-      print("\nERROR GET DOWNLOAD URL:");
-      print(e);
-      print("\n");
+      _printError(service: 'getDownloadUrl', error: e);
 
       return {'success': false, 'message': 'Error de red'};
     }

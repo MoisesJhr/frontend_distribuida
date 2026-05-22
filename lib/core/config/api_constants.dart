@@ -13,7 +13,7 @@ class ApiConstants {
 
     // Entorno de desarrollo local
     if (Platform.isAndroid) {
-      return 'http://10.0.2.2:8080/api/v1'; // Emulador Android
+      return "http://172.26.160.161:8080/api/v1"; // Emulador Android
     } else {
       return 'http://localhost:8080/api/v1'; // iOS / Web
     }

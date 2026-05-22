@@ -7,7 +7,6 @@ import '../../../core/models/theme_model.dart';
 
 class ThemeService {
   final _storage = const FlutterSecureStorage();
-
   final String baseUrl = "${ApiConstants.baseUrl}/files/themes";
 
   Future<String?> _getToken() async {
@@ -16,188 +15,160 @@ class ThemeService {
 
   Future<Map<String, String>?> _getHeaders() async {
     final token = await _getToken();
-
     if (token == null) return null;
-
     return {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $token',
     };
   }
 
+  // --- SISTEMA DE LOGS ---
+  void _printRequest(
+    String service,
+    String method,
+    String url, [
+    Map<String, String>? headers,
+  ]) {
+    print('================ REQUEST [$service] ================');
+    print('HTTP METHOD: $method');
+    print('URL: $url');
+    print('====================================================');
+  }
+
+  void _printResponse(String service, int statusCode, dynamic body) {
+    print('================ RESPONSE [$service] ================');
+    print('STATUS CODE: $statusCode');
+    print('BODY: ${jsonEncode(body)}');
+    print('=====================================================');
+  }
+
+  // ==========================================================================
+  // OBTENER CATÁLOGO GLOBAL (GET)
+  // ==========================================================================
   Future<Map<String, dynamic>> getGlobalThemes() async {
     final headers = await _getHeaders();
-
-    if (headers == null) {
-      return {'success': false, 'message': 'No autorizado'};
-    }
+    if (headers == null) return {'success': false, 'message': 'No autorizado'};
 
     try {
-      print("\n");
-      print("============ Obtener tematicas globales ============");
-      print("REQUEST:");
-      print("GET -> $baseUrl");
-      print("HEADERS:");
-      print(headers);
-
+      _printRequest('getGlobalThemes', 'GET', baseUrl);
       final response = await http.get(Uri.parse(baseUrl), headers: headers);
 
-      print("\nRESPONSE:");
-      print("STATUS CODE: ${response.statusCode}");
-      print("BODY:");
-      print(response.body);
-      print("===========================================");
-      print("\n");
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-
-        return {'success': true, 'data': ThemeModel.fromJsonList(data)};
+      dynamic decodedBody;
+      try {
+        decodedBody = jsonDecode(response.body);
+      } catch (_) {
+        decodedBody = response.body;
       }
 
-      final errorBody = jsonDecode(response.body);
+      _printResponse('getGlobalThemes', response.statusCode, decodedBody);
 
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': decodedBody};
+      }
       return {
         'success': false,
-        'message':
-            errorBody['message'] ??
-            errorBody['mensaje'] ??
-            'Error al cargar catálogo',
+        'message': decodedBody['message'] ?? 'Error al cargar catálogo',
       };
     } catch (e) {
-      print("\nERROR GET GLOBAL THEMES:");
-      print(e);
-      print("\n");
-
       return {'success': false, 'message': 'Error de red'};
     }
   }
 
+  // ==========================================================================
+  // OBTENER MIS TEMÁTICAS (GET) - Para el Dashboard
+  // ==========================================================================
   Future<Map<String, dynamic>> getMyThemes() async {
     final headers = await _getHeaders();
-
-    if (headers == null) {
-      return {'success': false, 'message': 'No autorizado'};
-    }
+    if (headers == null) return {'success': false, 'message': 'No autorizado'};
 
     try {
       final url = '$baseUrl/me';
-
-      print("\n");
-      print("============== Obtener mis tematicas ==============");
-      print("REQUEST:");
-      print("GET -> $url");
-      print("HEADERS:");
-      print(headers);
+      _printRequest('getMyThemes', 'GET', url);
 
       final response = await http.get(Uri.parse(url), headers: headers);
 
-      print("\nRESPONSE:");
-      print("STATUS CODE: ${response.statusCode}");
-      print("BODY:");
-      print(response.body);
-      print("===========================================");
-      print("\n");
+      dynamic decodedBody;
+      try {
+        decodedBody = jsonDecode(response.body);
+      } catch (_) {
+        decodedBody = response.body;
+      }
+
+      _printResponse('getMyThemes', response.statusCode, decodedBody);
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
+        List<dynamic> subcategoriasPlanas = [];
 
-        return {'success': true, 'data': ThemeModel.fromJsonList(data)};
-      }
+        // Extraemos de la estructura de MongoDB: [ { "areasInteres": [ { "subcategorias": [...] } ] } ]
+        if (decodedBody is List && decodedBody.isNotEmpty) {
+          final documentoPreferencia = decodedBody[0];
 
-      try {
-        final errorBody = jsonDecode(response.body);
+          final List<dynamic> areas =
+              documentoPreferencia['areasInteres'] ??
+              documentoPreferencia['AreasInteres'] ??
+              [];
+
+          for (var area in areas) {
+            // 1. Rescatamos el nombre del área principal (Ej: "Matemáticas")
+            final String nombreDelArea =
+                area['nombreArea'] ?? area['NombreArea'] ?? '';
+            final subs = area['subcategorias'] ?? area['Subcategorias'] ?? [];
+
+            // 2. Le inyectamos el área a cada subcategoría antes de aplanarla
+            for (var sub in subs) {
+              final subMap = Map<String, dynamic>.from(sub);
+              subMap['nombreArea'] = nombreDelArea;
+              subcategoriasPlanas.add(subMap);
+            }
+          }
+        }
 
         return {
-          'success': false,
-          'message':
-              errorBody['message'] ??
-              errorBody['mensaje'] ??
-              'Error al cargar tus temáticas',
-        };
-      } catch (_) {
-        return {
-          'success': false,
-          'message': 'Error ${response.statusCode}. Body: ${response.body}',
+          'success': true,
+          'data': ThemeModel.fromJsonList(subcategoriasPlanas),
         };
       }
+
+      return {
+        'success': false,
+        'message': decodedBody['message'] ?? 'Error al cargar tus temáticas',
+      };
     } catch (e) {
-      print("\nERROR GET MY THEMES:");
-      print(e);
-      print("\n");
-
       return {'success': false, 'message': 'Error de red'};
     }
   }
 
-  Future<Map<String, dynamic>> saveMyThemes(List<String> themeIds) async {
+  Future<Map<String, dynamic>> saveMyThemes(
+    List<Map<String, dynamic>> payload,
+  ) async {
     final headers = await _getHeaders();
-
-    if (headers == null) {
-      return {'success': false, 'message': 'No autorizado'};
-    }
+    if (headers == null) return {'success': false, 'message': 'No autorizado'};
 
     try {
       final url = '$baseUrl/me';
-
-      final requestBody = {"tematicasIds": themeIds};
-
-      print("\n");
-      print("============ Guardar mis tematicas ==============");
-      print("REQUEST:");
-      print("POST -> $url");
-      print("HEADERS:");
-      print(headers);
-      print("BODY:");
-      print(jsonEncode(requestBody));
+      _printRequest('saveMyThemes', 'POST', url);
 
       final response = await http.post(
         Uri.parse(url),
         headers: headers,
-        body: jsonEncode(requestBody),
+        body: jsonEncode(payload),
       );
 
-      print("\nRESPONSE:");
-      print("STATUS CODE: ${response.statusCode}");
-      print("BODY:");
-      print(response.body);
-      print("===========================================");
-      print("\n");
-
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
-        return {
-          'success': true,
-          'message': data['mensaje'] ?? 'Temáticas guardadas correctamente',
-        };
+      dynamic decodedBody;
+      try {
+        decodedBody = jsonDecode(response.body);
+      } catch (_) {
+        decodedBody = response.body;
       }
 
-      final errorBody = jsonDecode(response.body);
+      _printResponse('saveMyThemes', response.statusCode, decodedBody);
 
-      if (response.statusCode == 409) {
-        return {
-          'success': false,
-          'message':
-              errorBody['message'] ??
-              errorBody['mensaje'] ??
-              'Ya existen temáticas registradas',
-        };
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'message': 'Temáticas guardadas'};
       }
-
-      return {
-        'success': false,
-        'message':
-            errorBody['message'] ??
-            errorBody['mensaje'] ??
-            'Error al guardar temáticas',
-      };
+      return {'success': false, 'message': 'Error al guardar temáticas'};
     } catch (e) {
-      print("\nERROR SAVE MY THEMES:");
-      print(e);
-      print("\n");
-
-      return {'success': false, 'message': 'Error de red'};
+      return {'success': false, 'message': 'Error de conexión'};
     }
   }
 }

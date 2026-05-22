@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/admin_theme_service.dart';
+import '../../../core/models/theme_model.dart';
 
 class ThemeAuditDetailScreen extends StatefulWidget {
   final String userId;
@@ -17,7 +18,7 @@ class ThemeAuditDetailScreen extends StatefulWidget {
 
 class _ThemeAuditDetailScreenState extends State<ThemeAuditDetailScreen> {
   final AdminThemeService _themeService = AdminThemeService();
-  List<dynamic> _userThemes = [];
+  List<ThemeModel> _userThemes = []; // Tipado correctamente como ThemeModel
   bool _isLoading = true;
 
   @override
@@ -31,9 +32,12 @@ class _ThemeAuditDetailScreenState extends State<ThemeAuditDetailScreen> {
     final result = await _themeService.getUserThemes(widget.userId);
     if (result['success']) {
       setState(() {
-        _userThemes = result['data'];
+        _userThemes =
+            result['data']; // Ya viene convertido por ThemeModel.fromJsonList
         _isLoading = false;
       });
+    } else {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -50,7 +54,7 @@ class _ThemeAuditDetailScreenState extends State<ThemeAuditDetailScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        final List<dynamic> catalog = catalogResult['data'];
+        final List<ThemeModel> catalog = catalogResult['data'];
         return Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -64,15 +68,17 @@ class _ThemeAuditDetailScreenState extends State<ThemeAuditDetailScreen> {
               const SizedBox(height: 16),
               Expanded(
                 child: ListView.builder(
+                  shrinkWrap:
+                      true, // Importante para que ListView funcione dentro de modal
                   itemCount: catalog.length,
                   itemBuilder: (context, index) {
                     final item = catalog[index];
                     final bool alreadyHas = _userThemes.any(
-                      (t) => t['id'] == item['id'],
+                      (t) => t.id == item.id,
                     );
 
                     return ListTile(
-                      title: Text(item['nombre']),
+                      title: Text(item.nombre),
                       trailing: Icon(
                         alreadyHas
                             ? Icons.check_circle
@@ -85,7 +91,7 @@ class _ThemeAuditDetailScreenState extends State<ThemeAuditDetailScreen> {
                               Navigator.pop(context);
                               await _themeService.assignThemeToUser(
                                 widget.userId,
-                                item['id'],
+                                item.id,
                               );
                               _loadUserThemes();
                             },
@@ -100,7 +106,7 @@ class _ThemeAuditDetailScreenState extends State<ThemeAuditDetailScreen> {
     );
   }
 
-  // DIÁLOGO DE PURGA (REQUERIMIENTO PROFESORA)
+  // DIÁLOGO DE PURGA
   Future<void> _confirmForceDelete(String themeId, String themeName) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -151,18 +157,20 @@ class _ThemeAuditDetailScreenState extends State<ThemeAuditDetailScreen> {
               padding: const EdgeInsets.all(16),
               itemCount: _userThemes.length,
               itemBuilder: (context, index) {
-                final theme = _userThemes[index];
+                final ThemeModel theme = _userThemes[index];
                 return Card(
                   child: ListTile(
                     leading: const Icon(Icons.folder, color: Colors.orange),
-                    title: Text(theme['nombre']),
+                    title: Text(theme.nombre), // Acceso correcto con punto
                     trailing: IconButton(
                       icon: const Icon(
                         Icons.delete_forever,
                         color: Colors.redAccent,
                       ),
-                      onPressed: () =>
-                          _confirmForceDelete(theme['id'], theme['nombre']),
+                      onPressed: () => _confirmForceDelete(
+                        theme.id,
+                        theme.nombre,
+                      ), // Acceso correcto con punto
                     ),
                   ),
                 );

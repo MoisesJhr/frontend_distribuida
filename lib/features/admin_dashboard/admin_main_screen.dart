@@ -1,10 +1,14 @@
+import 'package:clasificador_archivos/core/models/user_model.dart';
 import 'package:clasificador_archivos/features/admin_dashboard/screens/theme_audit_detail_screen.dart';
 import 'package:clasificador_archivos/features/auth/screens/login_screen.dart';
 import 'package:flutter/material.dart';
 import '../../../core/services/admin_service.dart';
 import '../../../core/widgets/custom_text_field.dart';
-import '../../../core/widgets/custom_dropdown_field.dart'; // Asegúrate de tener este widget
+import '../../../core/widgets/custom_dropdown_field.dart';
 import '../../../core/widgets/primary_button.dart';
+
+// Asegúrate de importar tu modelo aquí si está en otro archivo
+// import 'ruta/a/tu/user_model.dart';
 
 class AdminMainScreen extends StatefulWidget {
   const AdminMainScreen({super.key});
@@ -15,7 +19,9 @@ class AdminMainScreen extends StatefulWidget {
 
 class _AdminMainScreenState extends State<AdminMainScreen> {
   final AdminService _adminService = AdminService();
-  List<dynamic> _users = [];
+
+  // TIPADO FUERTE: Ahora Flutter sabe que esta lista solo contiene UserModels
+  List<UserModel> _users = [];
   bool _isLoading = true;
 
   // Catálogo de carreras para consistencia
@@ -32,7 +38,8 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
     final result = await _adminService.getAllUsers();
     if (result['success']) {
       setState(() {
-        _users = result['data'];
+        // Aseguramos que la lista se parsee correctamente al modelo
+        _users = List<UserModel>.from(result['data']);
         _isLoading = false;
       });
     } else {
@@ -179,11 +186,12 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
     );
   }
 
-  // --- MODAL: EDITAR DATOS (Nombre, Correo, Carrera) ---
-  void _showEditUserModal(Map<String, dynamic> user) {
-    final nameController = TextEditingController(text: user['nombre']);
-    final emailController = TextEditingController(text: user['email']);
-    String? selectedCareer = user['carrera'];
+  // --- MODAL: EDITAR DATOS ---
+  // CORRECCIÓN: Ahora recibe un UserModel, no un Map
+  void _showEditUserModal(UserModel user) {
+    final nameController = TextEditingController(text: user.nombre);
+    final emailController = TextEditingController(text: user.email);
+    String? selectedCareer = user.carrera;
 
     showModalBottomSheet(
       context: context,
@@ -236,7 +244,7 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                 text: 'Actualizar Datos',
                 onPressed: () async {
                   final messenger = ScaffoldMessenger.of(context);
-                  final result = await _adminService.updateUser(user['id'], {
+                  final result = await _adminService.updateUser(user.id, {
                     'nombre': nameController.text.trim(),
                     'email': emailController.text.trim(),
                     'carrera': selectedCareer,
@@ -262,7 +270,7 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
     );
   }
 
-  // --- MODAL: CAMBIAR CONTRASEÑA (Con Verificación) ---
+  // --- MODAL: CAMBIAR CONTRASEÑA ---
   void _showChangePasswordModal(String userId) {
     final passwordController = TextEditingController();
     final confirmController = TextEditingController();
@@ -398,7 +406,8 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                     itemCount: _users.length,
                     itemBuilder: (context, index) {
                       final user = _users[index];
-                      final bool isAdmin = user['rol'] == 'ADMIN';
+                      // CORRECCIÓN: Notación de punto para el rol
+                      final bool isAdmin = user.rol == 'ADMIN';
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 16),
@@ -444,8 +453,9 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
+                                        // CORRECCIÓN: Notación de punto
                                         Text(
-                                          user['nombre'],
+                                          user.nombre,
                                           style: const TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 16,
@@ -453,8 +463,9 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                                           ),
                                         ),
                                         const SizedBox(height: 4),
+                                        // CORRECCIÓN: Notación de punto
                                         Text(
-                                          user['email'],
+                                          user.email,
                                           style: TextStyle(
                                             color: Colors.grey.shade600,
                                             fontSize: 13,
@@ -476,7 +487,8 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Text(
-                                      user['rol'],
+                                      // CORRECCIÓN: Notación de punto
+                                      user.rol,
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold,
@@ -513,8 +525,9 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                                       MaterialPageRoute(
                                         builder: (context) =>
                                             ThemeAuditDetailScreen(
-                                              userId: user['id'],
-                                              userName: user['nombre'],
+                                              // CORRECCIÓN: Notación de punto
+                                              userId: user.id,
+                                              userName: user.nombre,
                                             ),
                                       ),
                                     ),
@@ -527,6 +540,7 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                                           color: Colors.blueAccent,
                                           size: 20,
                                         ),
+                                        // CORRECCIÓN: Se pasa el objeto user directamente
                                         onPressed: () =>
                                             _showEditUserModal(user),
                                       ),
@@ -536,10 +550,9 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                                           color: Colors.orangeAccent,
                                           size: 20,
                                         ),
+                                        // CORRECCIÓN: Notación de punto
                                         onPressed: () =>
-                                            _showChangePasswordModal(
-                                              user['id'],
-                                            ),
+                                            _showChangePasswordModal(user.id),
                                       ),
                                       IconButton(
                                         icon: const Icon(
@@ -547,8 +560,8 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                                           color: Colors.redAccent,
                                           size: 20,
                                         ),
-                                        onPressed: () =>
-                                            _deleteUser(user['id']),
+                                        // CORRECCIÓN: Notación de punto
+                                        onPressed: () => _deleteUser(user.id),
                                       ),
                                     ],
                                   ),
